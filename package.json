@@ -1,0 +1,39 @@
+{
+  "name": "pacifica-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for interacting with Pacifica perpetual DEX API",
+  "main": "dist/bot.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/bot.js",
+    "dev": "ts-node src/bot.ts",
+    "watch": "tsc -w",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "pacifica",
+    "dex",
+    "crypto"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "@types/uuid": "^11.0.0",
+    "axios": "^1.6.2",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.3.1",
+    "mongoose": "^8.0.3",
+    "node-telegram-bot-api": "^0.64.0",
+    "tweetnacl": "^1.0.3",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/node-telegram-bot-api": "^0.64.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
