@@ -52,7 +52,7 @@ export class ConnectionHandler {
       { parse_mode: 'Markdown' }
     );
 
-    await this.bot.sendPhoto(chatId, 'https://i.ibb.co/mVt9fnVM/Screenshot-2025-10-24-at-22-36-22.png');
+    await this.bot.sendPhoto(chatId, 'https://i.ibb.co/BHMnRzhL/wallet-agent-key.png');
   }
 
   // Handle agent private key input (Step 2)
