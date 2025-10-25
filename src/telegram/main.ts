@@ -148,6 +148,18 @@ export class TelegramHandlers {
           await this.ordersHandler.startLimitOrderCreation(chatId, userId, this.userStates);
           break;
 
+        case 'create_market':
+          await this.ordersHandler.startMarketOrderCreation(chatId, userId, this.userStates);
+          break;
+
+        case 'cancel_order_menu':
+          await this.ordersHandler.startCancelOrder(chatId, userId, this.userStates);
+          break;
+
+        case 'create_tpsl':
+          await this.ordersHandler.startTpslCreation(chatId, userId);
+          break;
+
         case 'settings':
           await this.settingsHandler.showSettings(chatId, userId);
           break;
@@ -224,7 +236,17 @@ export class TelegramHandlers {
       }
 
       if (state.awaitingOrderAmount) {
-        await this.ordersHandler.handleOrderAmount(chatId, userId, text, this.userStates);
+        // Check if it's a market order (no price) or limit order (has price)
+        if (state.orderData?.price) {
+          await this.ordersHandler.handleOrderAmount(chatId, userId, text, this.userStates);
+        } else {
+          await this.ordersHandler.handleMarketOrderAmount(chatId, userId, text, this.userStates);
+        }
+        return;
+      }
+
+      if (state.awaitingCancelOrder) {
+        await this.ordersHandler.handleCancelOrderInput(chatId, userId, text, this.userStates);
         return;
       }
     } catch (error) {

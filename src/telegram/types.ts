@@ -6,12 +6,13 @@ export interface UserState {
   tempAgentPrivateKey?: string;
   tempAgentPublicKey?: string;
   
-  // Limit order creation flow
+  // Order creation flow (works for both limit and market orders)
   creatingLimitOrder?: boolean;
   awaitingOrderSymbol?: boolean;
   awaitingOrderSide?: boolean;
   awaitingOrderPrice?: boolean;
   awaitingOrderAmount?: boolean;
+  awaitingCancelOrder?: boolean;
   orderData?: {
     symbol?: string;
     side?: 'bid' | 'ask';
