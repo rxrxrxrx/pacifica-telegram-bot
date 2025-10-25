@@ -1,13 +1,19 @@
 // Mongoose model for storing user credentials
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface EncryptedPrivateKey {
+  encrypted: string;
+  iv: string;
+  tag: string;
+}
+
 export interface IUser extends Document {
   telegramId: number;
   username?: string;
   firstName?: string;
   lastName?: string;
   accountPublicKey: string; // Main wallet public key
-  agentPrivateKey?: string; // Agent wallet private key (88 chars, for signing)
+  agentPrivateKey?: EncryptedPrivateKey; // Encrypted agent wallet private key
   agentPublicKey?: string; // Agent wallet public key (derived from private key)
   apiConfigKey?: string; // API Config Key from Pacifica dashboard (optional)
   createdAt: Date;
@@ -38,10 +44,14 @@ const UserSchema: Schema = new Schema({
     type: String,
     required: true,
   },
-  agentPrivateKey: {
-    type: String,
-    default: null,
-  },
+    agentPrivateKey: {
+      type: {
+        encrypted: { type: String, required: true },
+        iv: { type: String, required: true },
+        tag: { type: String, required: true },
+      },
+      default: null,
+    },
   agentPublicKey: {
     type: String,
     default: null,

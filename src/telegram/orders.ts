@@ -14,18 +14,40 @@ import { UserState } from './types';
 export class OrdersHandler {
   constructor(private bot: TelegramBot) {}
 
+  // Helper method to get decrypted private key for a user
+  private async getDecryptedPrivateKey(userId: number): Promise<string | null> {
+    try {
+      return await userService.getDecryptedPrivateKey(userId);
+    } catch (error) {
+      logger.error('Error getting decrypted private key:', error);
+      return null;
+    }
+  }
+
   // Start limit order creation flow
   async startLimitOrderCreation(chatId: number, userId: number, userStates: Map<number, UserState>): Promise<void> {
     try {
       // Check if user has agent wallet
       const user = await userService.getUserById(userId);
       
-      if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+      if (!user || !user.agentPublicKey) {
         await this.bot.sendMessage(
           chatId,
           '❌ *Trading features not enabled!*\n\n' +
           'You need an Agent Wallet to place orders.\n\n' +
           'Use /connect and provide your Agent Wallet Private Key.',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      // Check if private key can be decrypted
+      const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+      if (!decryptedPrivateKey) {
+        await this.bot.sendMessage(
+          chatId,
+          '❌ *Agent wallet not configured!*\n\n' +
+          'Please reconnect your wallet with /connect.',
           { parse_mode: 'Markdown' }
         );
         return;
@@ -242,8 +264,16 @@ export class OrdersHandler {
     state.orderData!.amount = amount.trim();
     
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       userStates.delete(userId);
       return;
     }
@@ -266,7 +296,7 @@ export class OrdersHandler {
     try {
       const result = await createLimitOrder({
         accountPublicKey: user.accountPublicKey,
-        agentPrivateKey: user.agentPrivateKey,
+        agentPrivateKey: decryptedPrivateKey,
         agentPublicKey: user.agentPublicKey,
         symbol: orderData.symbol!,
         side: orderData.side!,
@@ -378,8 +408,16 @@ export class OrdersHandler {
     state.orderData!.amount = amount.trim();
     
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       userStates.delete(userId);
       return;
     }
@@ -401,7 +439,7 @@ export class OrdersHandler {
     try {
       const result = await createMarketOrder({
         accountPublicKey: user.accountPublicKey,
-        agentPrivateKey: user.agentPrivateKey,
+        agentPrivateKey: decryptedPrivateKey,
         agentPublicKey: user.agentPublicKey,
         symbol: orderData.symbol!,
         side: orderData.side!,
@@ -517,8 +555,16 @@ export class OrdersHandler {
     }
 
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       userStates.delete(userId);
       return;
     }
@@ -553,7 +599,7 @@ export class OrdersHandler {
     try {
       const result = await cancelOrder({
         accountPublicKey: user.accountPublicKey,
-        agentPrivateKey: user.agentPrivateKey,
+        agentPrivateKey: decryptedPrivateKey,
         agentPublicKey: user.agentPublicKey,
         symbol: 'BTC', // Default symbol - could be made configurable
         orderId,
@@ -670,8 +716,16 @@ export class OrdersHandler {
     }
 
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       userStates.delete(userId);
       return;
     }
@@ -791,8 +845,16 @@ export class OrdersHandler {
     }
 
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await this.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       userStates.delete(userId);
       return;
     }
@@ -853,7 +915,7 @@ export class OrdersHandler {
     try {
       const result = await createPositionTpsl({
         accountPublicKey: user.accountPublicKey,
-        agentPrivateKey: user.agentPrivateKey,
+        agentPrivateKey: decryptedPrivateKey,
         agentPublicKey: user.agentPublicKey,
         symbol,
         side: side as 'bid' | 'ask',

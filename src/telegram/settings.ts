@@ -185,8 +185,16 @@ export class SettingsHandler {
     }
 
     const user = await userService.getUserById(userId);
-    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+    if (!user || !user.agentPublicKey) {
       await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      if (userStates) userStates.delete(userId);
+      return;
+    }
+
+    // Get decrypted private key
+    const decryptedPrivateKey = await userService.getDecryptedPrivateKey(userId);
+    if (!decryptedPrivateKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not configured. Reconnect with /connect');
       if (userStates) userStates.delete(userId);
       return;
     }
@@ -216,7 +224,7 @@ export class SettingsHandler {
     try {
       const result = await updateLeverage({
         accountPublicKey: user.accountPublicKey,
-        agentPrivateKey: user.agentPrivateKey,
+        agentPrivateKey: decryptedPrivateKey,
         agentPublicKey: user.agentPublicKey,
         symbol,
         leverage,

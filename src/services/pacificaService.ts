@@ -16,7 +16,13 @@ class PacificaService {
       throw new Error('Wallet not configured. Please connect your wallet first.');
     }
 
-    return createPacificaClient(user.accountPublicKey, user.agentPrivateKey);
+    // Get decrypted private key
+    const decryptedPrivateKey = await userService.getDecryptedPrivateKey(telegramId);
+    if (!decryptedPrivateKey) {
+      throw new Error('Agent wallet not configured. Please reconnect your wallet.');
+    }
+
+    return createPacificaClient(user.accountPublicKey, decryptedPrivateKey);
   }
 
   // Test user's API credentials

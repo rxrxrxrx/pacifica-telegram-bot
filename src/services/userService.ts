@@ -1,5 +1,6 @@
 // User service for managing user data and credentials
-import { IUser, User } from '../models/User';
+import { EncryptedPrivateKey, IUser, User } from '../models/User';
+import { EncryptionService } from '../util/encryption';
 import { logger } from '../util/logger';
 
 export interface UserData {
@@ -11,7 +12,7 @@ export interface UserData {
 
 export interface ApiCredentials {
   accountPublicKey: string;
-  agentPrivateKey?: string;
+  agentPrivateKey?: string; // Raw private key (will be encrypted)
   agentPublicKey?: string;
   apiConfigKey?: string;
 }
@@ -33,6 +34,21 @@ class UserService {
     return this.getUserByTelegramId(userId);
   }
 
+  // Get decrypted private key for a user
+  async getDecryptedPrivateKey(userId: number): Promise<string | null> {
+    try {
+      const user = await this.getUserByTelegramId(userId);
+      if (!user || !user.agentPrivateKey) {
+        return null;
+      }
+
+      return EncryptionService.decrypt(user.agentPrivateKey);
+    } catch (error) {
+      logger.error('Error decrypting private key:', error);
+      return null;
+    }
+  }
+
   // Create or update user with API credentials
   async saveUser(userData: UserData, credentials: ApiCredentials): Promise<IUser> {
     try {
@@ -44,7 +60,12 @@ class UserService {
         existingUser.firstName = userData.firstName;
         existingUser.lastName = userData.lastName;
         existingUser.accountPublicKey = credentials.accountPublicKey;
-        existingUser.agentPrivateKey = credentials.agentPrivateKey;
+        
+        // Encrypt private key if provided
+        if (credentials.agentPrivateKey) {
+          existingUser.agentPrivateKey = EncryptionService.encrypt(credentials.agentPrivateKey);
+        }
+        
         existingUser.agentPublicKey = credentials.agentPublicKey;
         existingUser.apiConfigKey = credentials.apiConfigKey;
         
@@ -52,6 +73,12 @@ class UserService {
         logger.info(`Updated user credentials for Telegram ID: ${userData.telegramId}`);
         return existingUser;
       } else {
+        // Encrypt private key if provided
+        let encryptedPrivateKey: EncryptedPrivateKey | undefined;
+        if (credentials.agentPrivateKey) {
+          encryptedPrivateKey = EncryptionService.encrypt(credentials.agentPrivateKey);
+        }
+
         // Create new user
         const newUser = new User({
           telegramId: userData.telegramId,
@@ -59,7 +86,7 @@ class UserService {
           firstName: userData.firstName,
           lastName: userData.lastName,
           accountPublicKey: credentials.accountPublicKey,
-          agentPrivateKey: credentials.agentPrivateKey,
+          agentPrivateKey: encryptedPrivateKey,
           agentPublicKey: credentials.agentPublicKey,
           apiConfigKey: credentials.apiConfigKey,
         });
@@ -84,7 +111,12 @@ class UserService {
       }
 
       user.accountPublicKey = credentials.accountPublicKey;
-      user.agentPrivateKey = credentials.agentPrivateKey;
+      
+      // Encrypt private key if provided
+      if (credentials.agentPrivateKey) {
+        user.agentPrivateKey = EncryptionService.encrypt(credentials.agentPrivateKey);
+      }
+      
       user.agentPublicKey = credentials.agentPublicKey;
       user.apiConfigKey = credentials.apiConfigKey;
       
