@@ -3,7 +3,9 @@ import TelegramBot from 'node-telegram-bot-api';
 import { cancelOrder } from '../pacifica/cancelOrder';
 import { createMarketOrder } from '../pacifica/createMarketOrder';
 import { createLimitOrder } from '../pacifica/createOrderLimit';
-// import { createPositionTpsl } from '../pacifica/createPositionTpsl'; // Future use
+import { createPositionTpsl } from '../pacifica/createPositionTpsl';
+import { getPositions } from '../pacifica/getPositions';
+import { getPriceForSymbol } from '../pacifica/getPrices';
 import { userService } from '../services/userService';
 import { logger } from '../util/logger';
 import { connectedKeyboard, sideSelectionKeyboard, symbolSelectionKeyboard } from './keyboards';
@@ -51,7 +53,7 @@ export class OrdersHandler {
     }
   }
 
-  // Handle symbol selection from button
+  // Handle symbol selection from button (works for both limit and market orders)
   async handleSymbolSelection(chatId: number, userId: number, symbol: string, userStates: Map<number, UserState>): Promise<void> {
     const state = userStates.get(userId);
     if (!state || !state.creatingLimitOrder) return;
@@ -61,9 +63,23 @@ export class OrdersHandler {
     state.awaitingOrderSide = true;
     userStates.set(userId, state);
 
+    // Get current price for the symbol
+    let priceInfo = '';
+    try {
+      const priceData = await getPriceForSymbol(symbol);
+      if (priceData) {
+        priceInfo = `\n💰 *Current Price:*\n`;
+        priceInfo += `Mark: *$${parseFloat(priceData.mark).toFixed(2)}*\n`;
+        priceInfo += `Mid: *$${parseFloat(priceData.mid).toFixed(2)}*\n`;
+        priceInfo += `Oracle: *$${parseFloat(priceData.oracle).toFixed(2)}*\n\n`;
+      }
+    } catch (error) {
+      logger.warn(`Could not fetch price for ${symbol}:`, error);
+    }
+
     await this.bot.sendMessage(
       chatId,
-      `✅ Symbol: *${symbol}*\n\n` +
+      `✅ Symbol: *${symbol}*${priceInfo}` +
       '2️⃣ Select side:',
       {
         parse_mode: 'Markdown',
@@ -83,9 +99,24 @@ export class OrdersHandler {
     userStates.set(userId, state);
 
     const action = side === 'bid' ? 'BUY' : 'SELL';
+    
+    // Get current price for reference
+    let priceInfo = '';
+    if (state.orderData?.symbol) {
+      try {
+        const priceData = await getPriceForSymbol(state.orderData.symbol);
+        if (priceData) {
+          const currentPrice = parseFloat(priceData.mark);
+          priceInfo = `\n💰 *Current Mark Price: $${currentPrice.toFixed(2)}*\n\n`;
+        }
+      } catch (error) {
+        logger.warn(`Could not fetch price for ${state.orderData.symbol}:`, error);
+      }
+    }
+
     await this.bot.sendMessage(
       chatId,
-      `✅ Side: *${action}*\n\n` +
+      `✅ Side: *${action}*${priceInfo}` +
       '3️⃣ Enter the limit price\n' +
       'Example: 95000\n\n' +
       'Or type *"cancel"* to stop',
@@ -440,15 +471,31 @@ export class OrdersHandler {
         return;
       }
 
-      await this.bot.sendMessage(
-        chatId,
-        '❌ *Cancel Order*\n\n' +
-        'Enter the order ID or client order ID to cancel:\n\n' +
-        'Example: 12345 (order ID)\n' +
-        'Or: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (client order ID)\n\n' +
-        'Type *"cancel"* to stop',
-        { parse_mode: 'Markdown' }
-      );
+      // Get user positions to show available orders
+      const positionsResult = await getPositions(user.accountPublicKey);
+      
+      let positionsText = '❌ *Cancel Order*\n\n';
+      
+      if (positionsResult.success && positionsResult.data && positionsResult.data.length > 0) {
+        positionsText += `*Your Open Positions:*\n`;
+        positionsResult.data.forEach((position, index) => {
+          const side = position.side === 'bid' ? 'LONG' : 'SHORT';
+          positionsText += `${index + 1}. *${position.symbol}* ${side}\n`;
+          positionsText += `   Amount: ${position.amount}\n`;
+          positionsText += `   Entry: $${parseFloat(position.entry_price).toFixed(2)}\n\n`;
+        });
+        positionsText += `Enter the symbol to cancel orders for:\n\n`;
+        positionsText += `Example: BTC, ETH, SOL\n`;
+      } else {
+        positionsText += `No open positions found.\n\n`;
+        positionsText += `Enter the order ID or client order ID to cancel:\n\n`;
+        positionsText += `Example: 12345 (order ID)\n`;
+        positionsText += `Or: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (client order ID)\n`;
+      }
+      
+      positionsText += `\nType *"cancel"* to stop`;
+
+      await this.bot.sendMessage(chatId, positionsText, { parse_mode: 'Markdown' });
 
       // Set state for cancel order input
       userStates.set(userId, {
@@ -556,7 +603,7 @@ export class OrdersHandler {
   }
 
   // Start TP/SL creation flow
-  async startTpslCreation(chatId: number, userId: number): Promise<void> {
+  async startTpslCreation(chatId: number, userId: number, userStates: Map<number, UserState>): Promise<void> {
     try {
       // Check if user has agent wallet
       const user = await userService.getUserById(userId);
@@ -572,17 +619,286 @@ export class OrdersHandler {
         return;
       }
 
-      await this.bot.sendMessage(
-        chatId,
-        '🎯 *Set Take Profit / Stop Loss*\n\n' +
-        'This feature is complex and requires multiple parameters.\n\n' +
-        'For now, please use the Pacifica web interface for TP/SL orders.\n\n' +
-        'This feature will be enhanced in future updates.',
-        { parse_mode: 'Markdown', ...connectedKeyboard }
-      );
+      // Get user positions
+      const positionsResult = await getPositions(user.accountPublicKey);
+      
+      if (!positionsResult.success || !positionsResult.data || positionsResult.data.length === 0) {
+        await this.bot.sendMessage(
+          chatId,
+          '❌ *No Open Positions*\n\n' +
+          'You need to have an open position to set TP/SL.\n\n' +
+          'Open a position first, then come back to set TP/SL.',
+          { parse_mode: 'Markdown', ...connectedKeyboard }
+        );
+        return;
+      }
+
+      let positionsText = '🎯 *Set Take Profit / Stop Loss*\n\n';
+      positionsText += `*Your Open Positions:*\n`;
+      
+      positionsResult.data.forEach((position, index) => {
+        const side = position.side === 'bid' ? 'LONG' : 'SHORT';
+        positionsText += `${index + 1}. *${position.symbol}* ${side}\n`;
+        positionsText += `   Amount: ${position.amount}\n`;
+        positionsText += `   Entry: $${parseFloat(position.entry_price).toFixed(2)}\n\n`;
+      });
+      
+      positionsText += `Select a position to set TP/SL:\n\n`;
+      positionsText += `Enter the symbol (e.g., BTC, ETH, SOL):\n`;
+      positionsText += `Type *"cancel"* to stop`;
+
+      await this.bot.sendMessage(chatId, positionsText, { parse_mode: 'Markdown' });
+
+      // Set state for TP/SL creation
+      userStates.set(userId, {
+        creatingTpsl: true,
+        awaitingTpslSymbol: true,
+        orderData: {},
+      });
     } catch (error) {
       logger.error('Error starting TP/SL creation:', error);
       await this.bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
+    }
+  }
+
+  // Handle TP/SL symbol selection
+  async handleTpslSymbolSelection(chatId: number, userId: number, symbol: string, userStates: Map<number, UserState>): Promise<void> {
+    if (symbol.toLowerCase() === 'cancel') {
+      userStates.delete(userId);
+      await this.bot.sendMessage(chatId, '❌ TP/SL creation cancelled.', connectedKeyboard);
+      return;
+    }
+
+    const user = await userService.getUserById(userId);
+    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    const upperSymbol = symbol.toUpperCase().trim();
+    
+    // Verify position exists
+    const positionsResult = await getPositions(user.accountPublicKey);
+    if (!positionsResult.success || !positionsResult.data) {
+      await this.bot.sendMessage(chatId, '❌ Could not fetch positions. Please try again.');
+      return;
+    }
+
+    const position = positionsResult.data.find(p => p.symbol === upperSymbol);
+    if (!position) {
+      await this.bot.sendMessage(
+        chatId,
+        `❌ No position found for ${upperSymbol}.\n\n` +
+        `Available positions: ${positionsResult.data.map(p => p.symbol).join(', ')}\n\n` +
+        `Type *"cancel"* to stop`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Get current price
+    let priceInfo = '';
+    try {
+      const priceData = await getPriceForSymbol(upperSymbol);
+      if (priceData) {
+        const currentPrice = parseFloat(priceData.mark);
+        priceInfo = `\n💰 *Current Mark Price: $${currentPrice.toFixed(2)}*\n`;
+      }
+    } catch (error) {
+      logger.warn(`Could not fetch price for ${upperSymbol}:`, error);
+    }
+
+    const side = position.side === 'bid' ? 'LONG' : 'SHORT';
+    const entryPrice = parseFloat(position.entry_price);
+    
+    // Update state
+    const state = userStates.get(userId);
+    if (state) {
+      state.awaitingTpslSymbol = false;
+      state.awaitingTpslType = true;
+      state.orderData = { symbol: upperSymbol, side: position.side };
+      userStates.set(userId, state);
+    }
+
+    await this.bot.sendMessage(
+      chatId,
+      `✅ Position: *${upperSymbol}* ${side}${priceInfo}\n` +
+      `Entry Price: *$${entryPrice.toFixed(2)}*\n\n` +
+      `What would you like to set?\n\n` +
+      `1️⃣ Take Profit only\n` +
+      `2️⃣ Stop Loss only\n` +
+      `3️⃣ Both TP & SL\n\n` +
+      `Type 1, 2, or 3\n` +
+      `Type *"cancel"* to stop`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // Handle TP/SL type selection
+  async handleTpslTypeSelection(chatId: number, userId: number, input: string, userStates: Map<number, UserState>): Promise<void> {
+    if (input.toLowerCase() === 'cancel') {
+      userStates.delete(userId);
+      await this.bot.sendMessage(chatId, '❌ TP/SL creation cancelled.', connectedKeyboard);
+      return;
+    }
+
+    const type = input.trim();
+    if (!['1', '2', '3'].includes(type)) {
+      await this.bot.sendMessage(
+        chatId,
+        '❌ Invalid selection. Type 1, 2, or 3.\n\n' +
+        'Type *"cancel"* to stop',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    const state = userStates.get(userId);
+    if (!state) return;
+
+    state.awaitingTpslType = false;
+    state.awaitingTpslPrice = true;
+    state.orderData!.tpslType = type;
+    userStates.set(userId, state);
+
+    const symbol = state.orderData!.symbol!;
+    const side = state.orderData!.side!;
+    const action = side === 'bid' ? 'LONG' : 'SHORT';
+
+    let message = `✅ TP/SL Type: *${type === '1' ? 'Take Profit Only' : type === '2' ? 'Stop Loss Only' : 'Both TP & SL'}*\n\n`;
+    message += `Position: *${symbol}* ${action}\n\n`;
+
+    if (type === '1' || type === '3') {
+      message += `Enter Take Profit price:\n`;
+      message += `Example: 55000 (for TP at $55,000)\n\n`;
+    }
+    if (type === '2' || type === '3') {
+      message += `Enter Stop Loss price:\n`;
+      message += `Example: 48000 (for SL at $48,000)\n\n`;
+    }
+    message += `Type *"cancel"* to stop`;
+
+    await this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  }
+
+  // Handle TP/SL price input and create
+  async handleTpslPriceInput(chatId: number, userId: number, input: string, userStates: Map<number, UserState>): Promise<void> {
+    if (input.toLowerCase() === 'cancel') {
+      userStates.delete(userId);
+      await this.bot.sendMessage(chatId, '❌ TP/SL creation cancelled.', connectedKeyboard);
+      return;
+    }
+
+    const user = await userService.getUserById(userId);
+    if (!user || !user.agentPrivateKey || !user.agentPublicKey) {
+      await this.bot.sendMessage(chatId, '❌ Agent wallet not found. Reconnect with /connect');
+      userStates.delete(userId);
+      return;
+    }
+
+    const state = userStates.get(userId);
+    if (!state) return;
+
+    const symbol = state.orderData!.symbol!;
+    const side = state.orderData!.side!;
+    const tpslType = state.orderData!.tpslType!;
+    
+    userStates.delete(userId);
+
+    // Parse prices based on type
+    let takeProfit: any = undefined;
+    let stopLoss: any = undefined;
+
+    if (tpslType === '1' || tpslType === '3') {
+      const tpPrice = parseFloat(input.trim());
+      if (isNaN(tpPrice) || tpPrice <= 0) {
+        await this.bot.sendMessage(
+          chatId,
+          '❌ Invalid Take Profit price. Enter a valid positive number.\n\n' +
+          'Type *"cancel"* to stop',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+      takeProfit = {
+        stop_price: tpPrice.toString(),
+        client_order_id: `tp_${Date.now()}`,
+      };
+    }
+
+    if (tpslType === '2' || tpslType === '3') {
+      const slPrice = parseFloat(input.trim());
+      if (isNaN(slPrice) || slPrice <= 0) {
+        await this.bot.sendMessage(
+          chatId,
+          '❌ Invalid Stop Loss price. Enter a valid positive number.\n\n' +
+          'Type *"cancel"* to stop',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+      stopLoss = {
+        stop_price: slPrice.toString(),
+        client_order_id: `sl_${Date.now()}`,
+      };
+    }
+
+    await this.bot.sendMessage(
+      chatId,
+      `🔄 Setting TP/SL for ${symbol}...`,
+      { parse_mode: 'Markdown' }
+    );
+
+    try {
+      const result = await createPositionTpsl({
+        accountPublicKey: user.accountPublicKey,
+        agentPrivateKey: user.agentPrivateKey,
+        agentPublicKey: user.agentPublicKey,
+        symbol,
+        side: side as 'bid' | 'ask',
+        takeProfit,
+        stopLoss,
+      });
+
+      if (result.success) {
+        let successMessage = `✅ *TP/SL Set Successfully!*\n\n`;
+        successMessage += `Symbol: *${symbol}*\n`;
+        if (takeProfit) successMessage += `Take Profit: *$${takeProfit.stop_price}*\n`;
+        if (stopLoss) successMessage += `Stop Loss: *$${stopLoss.stop_price}*\n`;
+        successMessage += `\nYour TP/SL orders have been placed.`;
+
+        await this.bot.sendMessage(chatId, successMessage, {
+          parse_mode: 'Markdown',
+          ...connectedKeyboard,
+        });
+      } else {
+        let errorMsg = 'Unknown error';
+        if (result.error) {
+          if (typeof result.error === 'object' && result.error !== null) {
+            errorMsg = (result.error as any).error || JSON.stringify(result.error);
+          } else if (typeof result.error === 'string') {
+            errorMsg = result.error;
+          }
+        }
+
+        await this.bot.sendMessage(
+          chatId,
+          `❌ *Failed to set TP/SL*\n\n` +
+          `Error: ${errorMsg}\n\n` +
+          `Please try again.`,
+          { parse_mode: 'Markdown', ...connectedKeyboard }
+        );
+      }
+    } catch (error: any) {
+      logger.error('Error setting TP/SL:', error);
+      await this.bot.sendMessage(
+        chatId,
+        `❌ *Error setting TP/SL*\n\n` +
+        `${error.message || 'An unexpected error occurred'}\n\n` +
+        `Please try again later.`,
+        { parse_mode: 'Markdown', ...connectedKeyboard }
+      );
     }
   }
 }

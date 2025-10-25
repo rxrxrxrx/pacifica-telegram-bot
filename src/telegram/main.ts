@@ -157,7 +157,7 @@ export class TelegramHandlers {
           break;
 
         case 'create_tpsl':
-          await this.ordersHandler.startTpslCreation(chatId, userId);
+          await this.ordersHandler.startTpslCreation(chatId, userId, this.userStates);
           break;
 
         case 'settings':
@@ -261,6 +261,18 @@ export class TelegramHandlers {
 
       if (state.awaitingLeverageValue) {
         await this.settingsHandler.handleLeverageValueInput(chatId, userId, text, this.userStates);
+        return;
+      }
+      if (state.awaitingTpslSymbol) {
+        await this.ordersHandler.handleTpslSymbolSelection(chatId, userId, text, this.userStates);
+        return;
+      }
+      if (state.awaitingTpslType) {
+        await this.ordersHandler.handleTpslTypeSelection(chatId, userId, text, this.userStates);
+        return;
+      }
+      if (state.awaitingTpslPrice) {
+        await this.ordersHandler.handleTpslPriceInput(chatId, userId, text, this.userStates);
         return;
       }
     } catch (error) {

@@ -46,7 +46,6 @@ function signMessage(message: string, keypair: Keypair): string {
 export interface TpslOrder {
   stop_price: string;
   limit_price?: string;
-  amount?: string;
   client_order_id?: string;
 }
 
@@ -62,10 +61,7 @@ export interface PositionTpslParams {
 
 export interface PositionTpslResponse {
   success: boolean;
-  data?: {
-    take_profit_order_id?: number;
-    stop_loss_order_id?: number;
-  };
+  data?: any;
   error?: string;
 }
 
@@ -106,9 +102,6 @@ export async function createPositionTpsl(params: PositionTpslParams): Promise<Po
       if (params.takeProfit.limit_price) {
         tpslPayload.take_profit.limit_price = params.takeProfit.limit_price;
       }
-      if (params.takeProfit.amount) {
-        tpslPayload.take_profit.amount = params.takeProfit.amount;
-      }
     }
 
     // Add stop loss if provided
@@ -119,9 +112,6 @@ export async function createPositionTpsl(params: PositionTpslParams): Promise<Po
       
       if (params.stopLoss.limit_price) {
         tpslPayload.stop_loss.limit_price = params.stopLoss.limit_price;
-      }
-      if (params.stopLoss.amount) {
-        tpslPayload.stop_loss.amount = params.stopLoss.amount;
       }
       if (params.stopLoss.client_order_id) {
         tpslPayload.stop_loss.client_order_id = params.stopLoss.client_order_id;

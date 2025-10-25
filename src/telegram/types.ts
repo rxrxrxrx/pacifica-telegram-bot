@@ -16,11 +16,16 @@ export interface UserState {
   awaitingLeverage?: boolean;
   awaitingLeverageSymbol?: boolean;
   awaitingLeverageValue?: boolean;
+  creatingTpsl?: boolean;
+  awaitingTpslSymbol?: boolean;
+  awaitingTpslType?: boolean;
+  awaitingTpslPrice?: boolean;
   orderData?: {
     symbol?: string;
     side?: 'bid' | 'ask';
     price?: string;
     amount?: string;
+    tpslType?: string;
   };
 }
 
