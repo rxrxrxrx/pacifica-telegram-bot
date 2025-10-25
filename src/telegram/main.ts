@@ -164,6 +164,10 @@ export class TelegramHandlers {
           await this.settingsHandler.showSettings(chatId, userId);
           break;
 
+        case 'leverage_settings':
+          await this.settingsHandler.showLeverageSettings(chatId, userId, this.userStates);
+          break;
+
         case 'cancel_order':
           this.userStates.delete(userId);
           await this.bot.sendMessage(chatId, '❌ Order creation cancelled.', connectedKeyboard);
@@ -247,6 +251,16 @@ export class TelegramHandlers {
 
       if (state.awaitingCancelOrder) {
         await this.ordersHandler.handleCancelOrderInput(chatId, userId, text, this.userStates);
+        return;
+      }
+
+      if (state.awaitingLeverageSymbol) {
+        await this.settingsHandler.handleLeverageSymbolInput(chatId, userId, text, this.userStates);
+        return;
+      }
+
+      if (state.awaitingLeverageValue) {
+        await this.settingsHandler.handleLeverageValueInput(chatId, userId, text, this.userStates);
         return;
       }
     } catch (error) {

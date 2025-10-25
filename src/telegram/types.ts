@@ -13,6 +13,9 @@ export interface UserState {
   awaitingOrderPrice?: boolean;
   awaitingOrderAmount?: boolean;
   awaitingCancelOrder?: boolean;
+  awaitingLeverage?: boolean;
+  awaitingLeverageSymbol?: boolean;
+  awaitingLeverageValue?: boolean;
   orderData?: {
     symbol?: string;
     side?: 'bid' | 'ask';

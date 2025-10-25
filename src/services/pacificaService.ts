@@ -93,6 +93,7 @@ class PacificaService {
         message += `  • Margin Used: $${parseFloat(account.total_margin_used).toFixed(2)}\n`;
         message += `  • Cross MMR: $${parseFloat(account.cross_mmr || '0').toFixed(2)}\n`;
       }
+      message += ` \n\n 💡 Use the buttons below to interact with the bot.\n`;
 
       return message;
     } catch (error: any) {
